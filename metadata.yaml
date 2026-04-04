@@ -1,5 +1,5 @@
 homepage: "https://trackapi.app.br"
 documentation: "https://trackapi.app.br/docs"
 versions:
-  - sha: ""
+  - sha: "c74ab71d4cc027b1c65d2c965dc53d028ba862e2"
     changeNotes: Initial release.
