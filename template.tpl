@@ -18,7 +18,7 @@ ___INFO___
     "ANALYTICS",
     "CONVERSIONS"
   ],
-  "description": "Mapeia eventos GTM para nomes válidos do Facebook Pixel. Filtra eventos internos do GTM (gtm.*) e mapeia gtm.js como PageView. Use no campo Event Name da tag nativa do Facebook Pixel para evitar disparos indevidos.",
+  "description": "Mapeia eventos GTM para nomes válidos do Facebook Pixel. Filtra eventos internos do GTM (gtm.*) e mapeia gtm.js como PageView. Configure o campo \u0027GTM Event\u0027 com a variável {{Event}} do GTM.",
   "containerContexts": [
     "WEB"
   ]
@@ -27,60 +27,46 @@ ___INFO___
 
 ___TEMPLATE_PARAMETERS___
 
-[]
+[
+  {
+    "type": "TEXT",
+    "name": "gtmEvent",
+    "displayName": "GTM Event (obrigatório)",
+    "simpleValueType": true,
+    "help": "Configure com a variável built-in {{Event}} do GTM. Isso garante que eventos internos como gtm.historyChange sejam corretamente filtrados no ambiente sandboxed.",
+    "valueValidators": [
+      {
+        "type": "NON_EMPTY"
+      }
+    ]
+  }
+]
 
 
 ___SANDBOXED_JS_FOR_WEB_TEMPLATE___
 
-var copyFromDataLayer = require('copyFromDataLayer');
+var makeString = require('makeString');
 
-var ev = copyFromDataLayer('event') || '';
+// The GTM built-in {{Event}} variable must be passed as the "gtmEvent" parameter.
+// It is evaluated BEFORE the sandboxed context, so it always has the correct
+// event name — including internal GTM events like gtm.historyChange.
+var ev = makeString(data.gtmEvent || '');
 
-// Bloqueia eventos internos do GTM (gtm.dom, gtm.load, gtm.historyChange, etc.)
-// Retornar undefined impede o disparo da tag do Facebook Pixel
-if (ev.indexOf('gtm.') === 0 && ev !== 'gtm.js') {
-  return undefined;
-}
-
-// Mapeia gtm.js (carregamento inicial do GTM) como PageView
-// Garante que o Pixel dispare um PageView no carregamento da página,
-// após o GTM estar completamente inicializado
-if (ev === 'gtm.js') {
+// All GTM internal events (gtm.js, gtm.dom, gtm.load, gtm.historyChange)
+// are page lifecycle events — map them all to PageView.
+// Deduplication via {{TrackAPI - Event ID}} ensures Meta counts only one
+// PageView per page load, even if multiple gtm.* events fire.
+if (ev.indexOf('gtm.') === 0) {
   return 'PageView';
 }
 
-// Eventos de negócio passam como estão (Lead, Purchase, AddToCart, etc.)
+// Empty event names should not fire the Pixel
+if (!ev) {
+  return 'PageView';
+}
+
+// Business events pass as-is (Lead, Purchase, AddToCart, PageView, etc.)
 return ev;
-
-
-___WEB_PERMISSIONS___
-
-[
-  {
-    "instance": {
-      "key": {
-        "publicId": "read_data_layer",
-        "versionId": "1"
-      },
-      "param": [
-        {
-          "key": "allowedKeys",
-          "value": {
-            "type": 2,
-            "listItem": [
-              {
-                "type": 1,
-                "string": "event"
-              }
-            ]
-          }
-        }
-      ]
-    },
-    "clientAnnotations": {},
-    "isRequired": true
-  }
-]
 
 
 ___TESTS___
@@ -94,34 +80,23 @@ ___NOTES___
 
 Filtra e mapeia eventos GTM para nomes válidos do Facebook Pixel.
 
-### Por que é necessário?
+### Como funciona
 
-A tag nativa do Facebook Pixel no GTM dispara em TODOS os eventos do dataLayer por padrão
-— incluindo eventos internos do GTM como gtm.dom, gtm.load e gtm.historyChange.
-Sem este filtro, o Pixel dispararia eventos falsos e PageViews duplicados.
+- Todos os eventos `gtm.*` (gtm.js, gtm.dom, gtm.load, gtm.historyChange)
+  → retorna `'PageView'`
+- Eventos de negócio (Lead, Purchase, AddToCart) → retorna o nome original
+- A deduplicação pelo {{TrackAPI - Event ID}} garante que o Meta conte
+  apenas 1 PageView por carregamento, mesmo com múltiplos eventos gtm.*
 
-Esta variável:
-- Retorna `undefined` para eventos internos (gtm.*) → impede o disparo da tag
-- Retorna `'PageView'` para `gtm.js` → disparo correto no carregamento inicial da página
-- Retorna o nome original para eventos de negócio (Lead, Purchase, AddToCart, etc.)
+### Setup
 
-### Como usar
+1. Importe este template como Variável no GTM
+2. No campo **GTM Event**, configure: `{{Event}}` (variável built-in do GTM)
+3. Salve como "TrackAPI - FB Event Name"
+4. Na tag **Meta Pixel**, campo "Event Name" → `{{TrackAPI - FB Event Name}}`
+5. No campo "Event ID" → `{{TrackAPI - Event ID}}` para deduplicação
 
-1. No GTM, importe este template como Variável e salve como "TrackAPI - FB Event Name"
-2. Na tag nativa do **Facebook Pixel**, configure:
-   - Campo "Event Name" → Variável → {{TrackAPI - FB Event Name}}
-3. Use junto com {{TrackAPI - Event ID}} no campo Event ID para deduplicação correta com o TrackAPI CAPI
-
-### Fluxo completo com deduplicação
-
-```
-GTM dispara
-  ├─ Tag TrackAPI Analytics: SDK → CAPI (event_id: evt_123, event: 'Purchase')
-  └─ Tag Facebook Pixel nativa:
-       Event Name  → {{TrackAPI - FB Event Name}}  → 'Purchase'
-       Event ID    → {{TrackAPI - Event ID}}        → evt_123 (mesmo ID)
-Meta Events Manager: event_id idêntico → 1 conversão contabilizada ✅
-```
+Nenhum trigger de exceção necessário — funciona plug and play.
 
 ### Documentação completa
 
