@@ -10,9 +10,10 @@ A tag nativa do **Facebook Pixel** no GTM dispara em **todos** os eventos do dat
 
 | Evento GTM | Retorno | Resultado |
 |---|---|---|
-| `gtm.dom`, `gtm.load`, etc. | `undefined` | Tag não dispara |
-| `gtm.js` (carregamento inicial) | `'PageView'` | Pixel dispara PageView |
-| `Lead`, `Purchase`, `AddToCart`, etc. | o próprio nome | Pixel dispara normalmente |
+| `gtm.js`, `gtm.dom`, `gtm.load` | `'PageView'` | Pixel dispara PageView (carregamento real) |
+| `gtm.historyChange`, `gtm.scrollDepth`, `gtm.click`, `gtm.elementVisibility`, ... | `''` | Tag não dispara (evento interno ignorado) |
+| `Lead`, `Purchase`, `AddToCart`, `PageView`, etc. | o próprio nome | Pixel dispara normalmente |
+| evento vazio | `''` | Tag não dispara |
 
 ## Como usar
 

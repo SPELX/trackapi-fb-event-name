@@ -18,7 +18,7 @@ ___INFO___
     "ANALYTICS",
     "CONVERSIONS"
   ],
-  "description": "Mapeia eventos GTM para nomes válidos do Facebook Pixel. Filtra eventos internos do GTM (gtm.*) e mapeia gtm.js como PageView. Configure o campo \u0027GTM Event\u0027 com a variável {{Event}} do GTM.",
+  "description": "Maps GTM events to valid Facebook Pixel event names. Filters internal GTM events (gtm.*) and maps gtm.js to PageView. Set the \u0027GTM Event\u0027 field to the {{Event}} built-in variable.",
   "containerContexts": [
     "WEB"
   ]
@@ -31,9 +31,10 @@ ___TEMPLATE_PARAMETERS___
   {
     "type": "TEXT",
     "name": "gtmEvent",
-    "displayName": "GTM Event (obrigatório)",
+    "displayName": "GTM Event (required)",
     "simpleValueType": true,
-    "help": "Configure com a variável built-in {{Event}} do GTM. Isso garante que eventos internos como gtm.historyChange sejam corretamente filtrados no ambiente sandboxed.",
+    "defaultValue": "{{Event}}",
+    "help": "Set to the GTM built-in variable {{Event}}. This ensures internal GTM events like gtm.historyChange are correctly filtered inside the sandboxed template.",
     "valueValidators": [
       {
         "type": "NON_EMPTY"
@@ -52,17 +53,22 @@ var makeString = require('makeString');
 // event name — including internal GTM events like gtm.historyChange.
 var ev = makeString(data.gtmEvent || '');
 
-// All GTM internal events (gtm.js, gtm.dom, gtm.load, gtm.historyChange)
-// are page lifecycle events — map them all to PageView.
-// Deduplication via {{TrackAPI - Event ID}} ensures Meta counts only one
-// PageView per page load, even if multiple gtm.* events fire.
-if (ev.indexOf('gtm.') === 0) {
+// Only these 3 lifecycle events signal a real page load → PageView
+if (ev === 'gtm.js' || ev === 'gtm.dom' || ev === 'gtm.load') {
   return 'PageView';
 }
 
-// Empty event names should not fire the Pixel
+// All other gtm.* events (gtm.historyChange, gtm.scrollDepth, gtm.click,
+// gtm.elementVisibility, etc.) must NOT fire the pixel.
+// Returning '' causes the tag to receive an empty Event Name, which the
+// native Meta Pixel tag skips when Disable Automatic Configuration is on.
+if (ev.indexOf('gtm.') === 0) {
+  return '';
+}
+
+// Empty event names must not fire the pixel
 if (!ev) {
-  return 'PageView';
+  return '';
 }
 
 // Business events pass as-is (Lead, Purchase, AddToCart, PageView, etc.)
@@ -82,11 +88,10 @@ Filtra e mapeia eventos GTM para nomes válidos do Facebook Pixel.
 
 ### Como funciona
 
-- Todos os eventos `gtm.*` (gtm.js, gtm.dom, gtm.load, gtm.historyChange)
-  → retorna `'PageView'`
-- Eventos de negócio (Lead, Purchase, AddToCart) → retorna o nome original
-- A deduplicação pelo {{TrackAPI - Event ID}} garante que o Meta conte
-  apenas 1 PageView por carregamento, mesmo com múltiplos eventos gtm.*
+- `gtm.js`, `gtm.dom`, `gtm.load` → retorna `'PageView'` (carregamento real de página)
+- Demais `gtm.*` (`gtm.historyChange`, `gtm.scrollDepth`, `gtm.click`, etc.) → retorna `''` (tag não dispara)
+- Eventos de negócio (`Lead`, `Purchase`, `AddToCart`, `PageView`, etc.) → retorna o nome original
+- Evento vazio → retorna `''` (tag não dispara)
 
 ### Setup
 
